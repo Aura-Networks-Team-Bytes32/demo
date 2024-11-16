@@ -1,5 +1,7 @@
 "use client";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { createHash } from "crypto";
 import {
   Card,
   CardContent,
@@ -21,13 +23,106 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
+
+interface PaymentFormData {
+  name: string;
+  cardNumber: string;
+  month: string;
+  year: string;
+  cvv: string;
+}
+
+interface CardHashDetails {
+  cardNumber: string;
+  expirationDate: string;
+  cvv: string;
+}
+
+function hashCardDetails(
+  cardDetails: CardHashDetails
+): string {
+  const dataToHash = `${cardDetails.cardNumber}|${cardDetails.expirationDate}|${cardDetails.cvv}`;
+  const hash = createHash("sha256")
+    .update(dataToHash)
+    .digest("hex");
+  return hash;
+}
+
+function formatMonth(month: string): string {
+  // Ensure month is two digits
+  return month.padStart(2, "0");
+}
+
+function formatYear(year: string): string {
+  // Get last two digits of year
+  return year.slice(-2);
+}
 
 export function PaymentMethod() {
-  const { register, handleSubmit } = useForm();
-  const onSubmit = (data: any) => {
-    console.log(data);
+  const router = useRouter();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    watch,
+    setValue,
+    control, // Add control for handling Select components
+  } = useForm<PaymentFormData>();
+
+  // Format card number with spaces
+  const formatCardNumber = (value: string) => {
+    const cleanValue = value.replace(/\s/g, "");
+    const groups = cleanValue.match(/.{1,4}/g) || [];
+    return groups.join(" ").substr(0, 19); // 19 characters: 16 digits + 3 spaces
   };
+
+  // Handle card number input
+  const handleCardNumberChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const formatted = formatCardNumber(
+      e.target.value.replace(/[^\d]/g, "")
+    );
+    setValue("cardNumber", formatted);
+  };
+
+  const onSubmit = (data: PaymentFormData) => {
+    // Clean and format the data
+    const cleanCardNumber = data.cardNumber.replace(
+      /\s/g,
+      ""
+    );
+    const formattedMonth = formatMonth(data.month);
+    const formattedYear = formatYear(data.year);
+    const expirationDate = `${formattedMonth}/${formattedYear}`;
+
+    // Create card details object for hashing
+    const cardDetails: CardHashDetails = {
+      cardNumber: cleanCardNumber,
+      expirationDate: expirationDate,
+      cvv: data.cvv,
+    };
+
+    // Generate hash
+    const cardHash = hashCardDetails(cardDetails);
+
+    // Log both the clean data and the hash
+    console.log("Form Data:", {
+      ...data,
+      cardNumber: cleanCardNumber,
+      expirationDate,
+    });
+    console.log("Card Hash:", cardHash);
+
+    // Navigate to success page with hash as query parameter
+    router.push(
+      `/payment/payment-success?hash=${encodeURIComponent(
+        cardHash
+      )}`
+    );
+  };
+
   return (
     <div className="flex items-start justify-center px-4 pb-6 md:px-8">
       <form onSubmit={handleSubmit(onSubmit)}>
@@ -82,8 +177,15 @@ export function PaymentMethod() {
               <Input
                 id="name"
                 placeholder="Cardholder Name"
-                {...register("name", { required: true })}
+                {...register("name", {
+                  required: "Cardholder name is required",
+                })}
               />
+              {errors.name && (
+                <p className="text-sm text-red-500">
+                  {errors.name.message}
+                </p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="number">Card number</Label>
@@ -91,83 +193,130 @@ export function PaymentMethod() {
                 id="number"
                 placeholder="XXXX XXXX XXXX XXXX"
                 {...register("cardNumber", {
-                  required: true,
+                  required: "Card number is required",
+                  pattern: {
+                    value: /^[\d\s]{19}$/,
+                    message:
+                      "Please enter a valid 16-digit card number",
+                  },
+                  onChange: (e) =>
+                    handleCardNumberChange(e),
                 })}
+                maxLength={19}
               />
+              {errors.cardNumber && (
+                <p className="text-sm text-red-500">
+                  {errors.cardNumber.message}
+                </p>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="month">Expires</Label>
-                <Select
-                  {...register("month", { required: true })}
-                >
-                  <SelectTrigger id="month">
-                    <SelectValue placeholder="Month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">
-                      January
-                    </SelectItem>
-                    <SelectItem value="2">
-                      February
-                    </SelectItem>
-                    <SelectItem value="3">March</SelectItem>
-                    <SelectItem value="4">April</SelectItem>
-                    <SelectItem value="5">May</SelectItem>
-                    <SelectItem value="6">June</SelectItem>
-                    <SelectItem value="7">July</SelectItem>
-                    <SelectItem value="8">
-                      August
-                    </SelectItem>
-                    <SelectItem value="9">
-                      September
-                    </SelectItem>
-                    <SelectItem value="10">
-                      October
-                    </SelectItem>
-                    <SelectItem value="11">
-                      November
-                    </SelectItem>
-                    <SelectItem value="12">
-                      December
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="month">Month</Label>
+                <Controller
+                  name="month"
+                  control={control}
+                  rules={{ required: "Month is required" }}
+                  render={({ field }) => (
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                    >
+                      <SelectTrigger id="month">
+                        <SelectValue placeholder="Month" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from(
+                          { length: 12 },
+                          (_, i) => (
+                            <SelectItem
+                              key={i + 1}
+                              value={String(i + 1)}
+                            >
+                              {new Date(
+                                0,
+                                i
+                              ).toLocaleString("default", {
+                                month: "short",
+                              })}
+                            </SelectItem>
+                          )
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.month && (
+                  <p className="text-sm text-red-500">
+                    {errors.month.message}
+                  </p>
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="year">Year</Label>
-                <Select
-                  {...register("year", { required: true })}
-                >
-                  <SelectTrigger id="year">
-                    <SelectValue placeholder="Year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 21 }, (_, i) => (
-                      <SelectItem
-                        key={i}
-                        value={`${
-                          new Date().getFullYear() + i
-                        }`}
-                      >
-                        {new Date().getFullYear() + i}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Controller
+                  name="year"
+                  control={control}
+                  rules={{ required: "Year is required" }}
+                  render={({ field }) => (
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                    >
+                      <SelectTrigger id="year">
+                        <SelectValue placeholder="Year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from(
+                          { length: 21 },
+                          (_, i) => (
+                            <SelectItem
+                              key={i}
+                              value={`${
+                                new Date().getFullYear() + i
+                              }`}
+                            >
+                              {new Date().getFullYear() + i}
+                            </SelectItem>
+                          )
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.year && (
+                  <p className="text-sm text-red-500">
+                    {errors.year.message}
+                  </p>
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="cvc">CVV</Label>
                 <Input
                   id="cvc"
                   placeholder="CVV"
-                  {...register("cvv", { required: true })}
+                  type="text"
+                  maxLength={3}
+                  {...register("cvv", {
+                    required: "CVV is required",
+                    pattern: {
+                      value: /^[0-9]{3}$/,
+                      message: "CVV must be 3 digits",
+                    },
+                  })}
                 />
+                {errors.cvv && (
+                  <p className="text-sm text-red-500">
+                    {errors.cvv.message}
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>
           <CardFooter>
-            <Button className="w-full">Pay Now</Button>
+            <Button className="w-full" type="submit">
+              Pay Now
+            </Button>
           </CardFooter>
         </Card>
       </form>
