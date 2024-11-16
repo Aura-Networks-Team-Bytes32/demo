@@ -23,12 +23,10 @@ export default function PaymentSuccess() {
     value: string
   ) => {
     if (value.length > 1) {
-      // If someone pastes a number, take only the first digit
       value = value[0];
     }
 
     if (!/^\d*$/.test(value)) {
-      // If not a number, don't update
       return;
     }
 
@@ -36,7 +34,6 @@ export default function PaymentSuccess() {
     newOtp[index] = value;
     setOtp(newOtp);
 
-    // Auto-focus next input
     if (value !== "" && index < 5) {
       const nextInput = document.querySelector(
         `input[name=otp-${index + 1}]`
@@ -56,7 +53,6 @@ export default function PaymentSuccess() {
       otp[index] === "" &&
       index > 0
     ) {
-      // Focus previous input on backspace if current input is empty
       const prevInput = document.querySelector(
         `input[name=otp-${index - 1}]`
       ) as HTMLInputElement;
@@ -70,7 +66,6 @@ export default function PaymentSuccess() {
     const otpValue = otp.join("");
     console.log("OTP Submitted:", otpValue);
     console.log("Card Hash:", cardHash);
-    // Add your OTP verification logic here
   };
 
   return (
@@ -87,14 +82,14 @@ export default function PaymentSuccess() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex justify-center gap-2">
+          <div className="flex justify-center gap-2 sm:gap-4">
             {otp.map((digit, index) => (
               <Input
                 key={index}
                 type="text"
                 inputMode="numeric"
                 name={`otp-${index}`}
-                className="w-12 h-12 text-center text-lg"
+                className="w-10 h-10 text-center text-lg sm:w-12 sm:h-12"
                 value={digit}
                 onChange={(e) =>
                   handleOtpChange(index, e.target.value)
